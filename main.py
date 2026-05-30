@@ -11,12 +11,12 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode
 from services.vision.exercise_video_processor import VideoProcessorClass
 from services.tracking.metrics import sync_metrics_update
 from services.persistence.exercise_repository import get_users_exercises
-# from groq import Groq
-# from services.coaching.llm import LLMCoach
-# from services.coaching.tts import TextToSpeech
-# from services.coaching.voice_pipeline import VoicePipeline, autoplay_audio
+from groq import Groq
+from services.coaching.llm import LLMCoach
+from services.coaching.tts import TextToSpeech
+from services.coaching.voice_pipeline import VoicePipeline, autoplay_audio
 
-  
+
 def main():
     st.set_page_config(
         page_icon="🏋️‍♀️",
@@ -31,7 +31,7 @@ def main():
     init_db()
 
     if not render_login_wall():
-        return 
+        return
 
     initial_session_defaults()
 
@@ -41,16 +41,17 @@ def main():
 
             if not api_key and hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
                 api_key = st.secrets["GROQ_API_KEY"]
-            
-            # groq_client = Groq(api_key=api_key)
-            # llm_coach = LLMCoach(groq_client)
-            # tts = TextToSpeech()
-            # st.session_state.voice_pipeline = VoicePipeline(llm_coach, tts)
+
+            groq_client = Groq(api_key=api_key)
+            llm_coach = LLMCoach(groq_client)
+            tts = TextToSpeech()
+            st.session_state.voice_pipeline = VoicePipeline(llm_coach, tts)
         except Exception as e:
             st.session_state.voice_pipeline = None
+            st.error(f"Voice pipeline failed: {e}")
 
     workout_started = st.session_state.get("workout_started", False)
-    
+
     with st.sidebar:
         st.title("🏋️‍♂️ Apna AI Coach")
 
@@ -82,14 +83,19 @@ def main():
                 st.session_state.last_saved_sets_completed = 0
 
                 if st.session_state.voice_pipeline:
-                    result = st.session_state.voice_pipeline.process_event(
-                        event="workout_started",
-                        exercise=plan_exercise,
-                        metrics={}
-                    )
-                    
-                    if result:
-                        st.session_state.audio_to_play, st.session_state.coach_feedback = result
+                    try:
+                        result = st.session_state.voice_pipeline.process_event(
+                            event="workout_started",
+                            exercise=plan_exercise,
+                            metrics={}
+                        )
+                        st.write(f"DEBUG result: {result}")
+                        if result:
+                            st.session_state.audio_to_play, st.session_state.coach_feedback = result
+                    except Exception as e:
+                        st.error(f"Voice pipeline error: {e}")
+                else:
+                    st.error("Voice pipeline is None!")
 
                 st.session_state.last_notified_sets_completed = 0
                 st.session_state.last_notified_workout_complete = False
@@ -105,7 +111,7 @@ def main():
 
             if end_session_button:
                 st.session_state.workout_started = False
-                
+
                 if st.session_state.voice_pipeline:
                     result = st.session_state.voice_pipeline.process_event(
                         event="workout_completed",
@@ -167,9 +173,11 @@ def main():
 
     st.title("AI Real-time GYM Coach")
     st.markdown("#### Real-time pose detection with proactive AI voice coaching")
- 
-    # if st.session_state.get("audio_to_play"):
-    #     autoplay_audio(st.session_state.audio_to_play)
+
+    if st.session_state.get("audio_to_play"):
+        st.write(f"🔊 Audio size: {len(st.session_state.audio_to_play)} bytes")
+        autoplay_audio(st.session_state.audio_to_play)
+        st.session_state.audio_to_play = None
 
     if st.session_state.get("coach_feedback"):
         st.markdown("")
@@ -254,4 +262,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
